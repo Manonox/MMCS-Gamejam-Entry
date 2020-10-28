@@ -31,8 +31,8 @@ class Panel():
     def mouse_hover(self):
         if self.rect is None or self.hidden:
             return False
-        mouse_pos = pygame.mouse.get_pos()
-        return self.rect.collidepoint(mouse_pos)
+        mouse_pos = self.game.input.mouse_pos()
+        return self.rect.collidepoint(mouse_pos.list)
 
     def mouse_down(self):
         pass
@@ -92,3 +92,27 @@ class Button(Panel):
             else:
                 color = self.color_hover
         pygame.draw.rect(surface, color, self.rect)
+
+class ButtonImage(Panel):
+
+    def __init__(self, state, game):
+        super().__init__(state, game)
+        self.onclick = None
+        self.image = None
+        self.image_pressed = None
+        self.image_hover = None
+
+    def mouse_click(self):
+        if self.onclick:
+            self.onclick()
+
+    def draw(self, surface):
+        if self.hidden:
+            return
+        img = self.image
+        if self.mouse_hover():
+            if self.game.input.mouse_pressed()[0]:
+                color = self.image_pressed
+            else:
+                color = self.image_hover
+        surface.blit(img, self.rect)

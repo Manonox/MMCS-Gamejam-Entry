@@ -72,8 +72,14 @@ class GameWindow():
         self.changing_from = ""
         self.changing_to = ""
 
+    def to_real(self, v):
+        return v * self.real_size / self.window_size
+
+    def to_display(self, v):
+        return v * self.window_size / self.real_size
+
     def init_input(self):
-        self.input = Input()
+        self.input = Input(self)
 
     def run(self):
         self.running = True
@@ -86,9 +92,10 @@ class GameWindow():
 
         # Event'ы
         for ev in pygame.event.get():
-            self.pre_event(ev)
-            self.game_state().event(ev)
-            self.event(ev)
+            event = self.input.process_event(ev)
+            self.pre_event(event)
+            self.game_state().event(event)
+            self.event(event)
         # - - - - - - - -
 
         # Update'ы
