@@ -5,6 +5,7 @@ from sound import SoundSystem
 
 from states.main_menu.main import MainMenuState
 from states.default.main import DefaultState
+from states.pause.main import PauseState
 
 from classes.vector import Vector2
 from settings import Settings
@@ -16,7 +17,7 @@ from screeninfo import get_monitors
 
 import pymunk
 import pymunk.pygame_util
-positive_y_is_up = False
+pymunk.pygame_util.positive_y_is_up = False
 
 class GameWindow():
 
@@ -32,6 +33,8 @@ class GameWindow():
         pygame.init()
 
         self.init_window()
+        self.pymunk_debug_screen = pymunk.pygame_util.DrawOptions(self.screen)
+        self.pymunk_debug_surface = pymunk.pygame_util.DrawOptions(self.surface)
         self.init_physics()
         self.init_states()
         self.init_input()
@@ -45,8 +48,15 @@ class GameWindow():
         for i in range(2, max_px):
             pixel_scales.append(i)
         self.settings.add_select("pixel_scale", max_px-1, pixel_scales, False)
-        self.settings.add_boolean("fullscreen", True)
+        self.settings.add_boolean("fullscreen", False)
         self.settings.add_slider("framerate", 144, 30, 288)
+
+        self.settings.add_keybind("move_up", K_w)
+        self.settings.add_keybind("move_left", K_a)
+        self.settings.add_keybind("move_down", K_s)
+        self.settings.add_keybind("move_right", K_d)
+
+        self.settings.add_keybind("move_jump", K_SPACE)
 
     def init_window(self):
         fullscreen = self.settings.fullscreen.get()
@@ -70,7 +80,8 @@ class GameWindow():
     def init_states(self):
         self.states = {
             "main_menu": MainMenuState(self, "main_menu"),
-            "default": DefaultState(self, "default")
+            "default": DefaultState(self, "default"),
+            "pause": PauseState(self, "pause")
         }
 
         self.current_state = "main_menu"
@@ -83,8 +94,9 @@ class GameWindow():
         self.changing_to = ""
 
     def init_physics(self):
+        self.physics_scale = 2
         self.space = pymunk.Space()
-        self.space.gravity = 0, 1000
+        self.space.gravity = 0, 20 * 8 * self.physics_scale
         self.accumulator = 0
         self.phys_time = 0
 
@@ -110,21 +122,21 @@ class GameWindow():
         # Event'ы
         for ev in pygame.event.get():
             event = self.input.process_event(ev)
-            self.pre_event(event)
-            self.game_state().event(event)
+            if self.pre_event(event):
+                self.game_state().event(event)
             self.event(event)
         # - - - - - - - -
 
         # Update'ы
-        self.pre_update(self.delta)
-        self.game_state().update(self.delta)
+        if self.pre_update(self.delta):
+            self.game_state().update(self.delta)
         self.update(self.delta)
         # - - - - - - - -
 
         # Отрисовка
         self.surface.fill((255, 0, 255)) # Заполняем экран ярким цветом
-        self.pre_draw(self.surface)
-        self.game_state().draw(self.surface)
+        if self.pre_draw(self.surface):
+            self.game_state().draw(self.surface)
         self.draw(self.surface)
         if self.current_state == "default":
             surf = pygame.Surface((self.real_size / self.camera.get_zoom()).list)
@@ -159,8 +171,8 @@ class GameWindow():
 
         previous.deactivating = True
         next.activating = True
-        previous.pre_deactivate()
-        next.pre_activate()
+        previous.pre_deactivate(self.changing_to)
+        next.pre_activate(self.changing_from)
 
         if previous.instant_transition:
             self.confirm_change_state()
@@ -177,19 +189,23 @@ class GameWindow():
 
         previous.active = False
         next.active = True
-        previous.deactivate()
-        next.activate()
+        previous.deactivate(self.changing_to)
+        next.activate(self.changing_from)
 
     def pre_event(self, ev):
-        pass
+        if self.settings.changingBind:
+            self.settings.event(ev)
+            return False
+        return True
 
     def event(self, ev):
         if ev.type == pygame.QUIT:
             self.running = False
 
     def pre_update(self, dt):
+        self.phys_blend = 0
         if self.current_state == "default":
-            fixed_dt = 1/60
+            fixed_dt = 1/128
             self.accumulator += dt
             while self.accumulator >= fixed_dt:
                 self.space.step(fixed_dt)
@@ -199,16 +215,19 @@ class GameWindow():
             self.phys_blend = self.accumulator / fixed_dt
 
             self.camera.update(dt)
+        return True
 
     def update(self, dt):
         pass
 
     def pre_draw(self, surface):
-        pass
+        return True
 
     def draw(self, surface):
+        # self.space.debug_draw(self.pymunk_debug_surface)
         pass
 
     def draw_debug(self, surface):
+        #self.space.debug_draw(self.pymunk_debug_screen)
         text = "FPS: " + str(round(self.clock.get_fps(), 1))
         surface.blit(self.debug_font.render(text, True, (255, 255, 255)), (0, 0))

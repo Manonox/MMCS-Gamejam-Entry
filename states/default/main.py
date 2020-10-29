@@ -8,29 +8,39 @@ import random
 from classes.vector import Vector2
 
 from tilemap import Map
+from entlist import EntList, Player
 
 class DefaultState(FadeInOutState):
 
     def __init__(self, game, name):
         super().__init__(game, name)
+
+        self.entities = EntList(game)
+        self.fadeout_time = 0
+
         self.map = None
         self.map_generate()
+        self.spawn_player()
 
-    def map_generate(self, size=(128, 256), fill=0.5, seed=None):
+    def spawn_player(self):
+        self.player = Player(Vector2(32.5, 32))
+        self.entities.push(self.player)
+
+    def map_generate(self, size=(128, 256), fill=0.4, seed=None):
         self.map = Map(self.game)
 
         random.seed(seed)
 
-        wall_thickness = 12
+        wall_thickness = [18, 12]
 
         matr = []
         for y in range(0, size[1]):
             row = []
             for x in range(0, size[0]):
                 value = random.random()<fill
-                if (x < wall_thickness) or (x >= size[0]-wall_thickness):
+                if (x < wall_thickness[0]) or (x >= size[0]-wall_thickness[0]):
                     value = True
-                if (y < wall_thickness) or (y >= size[1]-wall_thickness):
+                if (y < wall_thickness[1]) or (y >= size[1]-wall_thickness[1]):
                     value = True
                 row.append(value)
             matr.append(row)
@@ -94,22 +104,24 @@ class DefaultState(FadeInOutState):
         self.map.bake_all()
         self.map.bake_all_physics()
 
+    def should_fade_in(self, state):
+        return state != "pause"
+
     def should_fade_out(self, state):
         return False
 
     def event(self, ev):
+        if ev.type == pygame.KEYUP:
+            if ev.key == "escape":
+                self.game.change_state("pause")
+                return
+        self.entities.event(ev)
         super().event(ev)
 
     def update(self, dt):
-        keys = pygame.key.get_pressed()
-        wantdir = Vector2(
-            (1 if keys[pygame.K_d] else 0) - (1 if keys[pygame.K_a] else 0),
-            (1 if keys[pygame.K_s] else 0) - (1 if keys[pygame.K_w] else 0)
-        )
-        wantdir.normalize()
-        self.game.camera.pos += wantdir * 400 * dt
-        self.game.camera.zoom = 2 if keys[pygame.K_e] else 1
-
+        aim = self.game.input.mouse_pos() - self.game.real_size / 2
+        self.game.camera.pos = self.player.pos + aim * 0.25
+        self.entities.update(dt)
         super().update(dt)
 
     def draw(self, surface):
@@ -117,4 +129,5 @@ class DefaultState(FadeInOutState):
         surface.fill((0, 0, 0))
         if self.map:
             self.map.draw(surface)
+        self.entities.draw(surface)
         super().draw(surface)

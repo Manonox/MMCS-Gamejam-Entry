@@ -29,7 +29,7 @@ class Chunk():
         self.surface = None
 
     def bake(self):
-        self.surface = pygame.Surface((self.size * self.map.tilesize).list)
+        self.surface = pygame.Surface((self.size * 8).list)
         sx = self.pos.x * self.size.x
         sy = self.pos.y * self.size.y
         for x in range(0, self.size.x):
@@ -41,7 +41,7 @@ class Chunk():
                 if coords is None:
                     continue
                 image = self.map.tc_image(coords)
-                blit_pos = Vector2(x, y) * self.map.tilesize
+                blit_pos = Vector2(x, y) * 8
                 self.surface.blit(image, blit_pos.list)
         self.surface = self.surface.convert(self.game.surface)
 
@@ -90,7 +90,7 @@ class Chunk():
                         edges[cell.edge_id[0]][1].y += 1
                     else:
                         cell.edge_id[0] = len(edges)
-                        edges.append([Vector2(rx, ry), Vector2(rx, ry+1)])
+                        edges.append([Vector2(rx, ry), Vector2(rx, ry+1), True, True])
 
                 if not cells[y][x+1].exists:
                     cell.edge_exist[1] = True
@@ -99,7 +99,7 @@ class Chunk():
                         edges[cell.edge_id[1]][1].y += 1
                     else:
                         cell.edge_id[1] = len(edges)
-                        edges.append([Vector2(rx+1, ry), Vector2(rx+1, ry+1)])
+                        edges.append([Vector2(rx+1, ry), Vector2(rx+1, ry+1), True, False])
 
                 if not cells[y-1][x].exists:
                     cell.edge_exist[2] = True
@@ -108,7 +108,7 @@ class Chunk():
                         edges[cell.edge_id[2]][1].x += 1
                     else:
                         cell.edge_id[2] = len(edges)
-                        edges.append([Vector2(rx, ry), Vector2(rx+1, ry)])
+                        edges.append([Vector2(rx, ry), Vector2(rx+1, ry), False, True])
 
                 if not cells[y+1][x].exists:
                     cell.edge_exist[3] = True
@@ -117,14 +117,16 @@ class Chunk():
                         edges[cell.edge_id[3]][1].x += 1
                     else:
                         cell.edge_id[3] = len(edges)
-                        edges.append([Vector2(rx, ry+1), Vector2(rx+1, ry+1)])
+                        edges.append([Vector2(rx, ry+1), Vector2(rx+1, ry+1), False, False])
 
         self.segments = edges
 
         space = self.game.space
         self.shapes = []
         for seg in self.segments:
-            shape = pymunk.Segment(space.static_body, seg[0].list, seg[1].list, 1)
+            seg[0] = (seg[0] + self.pos * self.size) * 8 * self.game.physics_scale
+            seg[1] = (seg[1] + self.pos * self.size) * 8 * self.game.physics_scale
+            shape = pymunk.Segment(space.static_body, seg[0].list, seg[1].list, 0.5 * self.game.physics_scale)
             shape.generated = True
             shape.chunk = self
             space.add(shape)
@@ -154,17 +156,22 @@ class Map():
 
         self.tilemap = pygame.image.load(get_path("resources/sprites/tilemap.png"))
         self.tilemap.set_colorkey((0, 0, 0))
-        self.tilesize = 8
         self.tilecoords = {}
         self.tilesolid = {}
+        self.tileinfo = {}
         self.tc_init()
 
         self.tileimages = {}
 
     def tc_init(self):
-        self.tc_add_4x4("cave_wall", (0, 0))
+        self.tc_add_4x4("cave_wall", (0, 0), {
+            "destructable": True
+        })
 
-    def tc_add_4x4(self, name, pos, solid=True):
+    def tc_add_4x4(self, name, pos, info=None, solid=True):
+        if info is None:
+            info = {}
+
         # LEFT RIGHT TOP BOTTOM
         suffixes = [
             ["1010", "0010", "0110", "1111"],
@@ -174,14 +181,15 @@ class Map():
         ]
         for y, row in enumerate(suffixes):
             for x, suffix in enumerate(row):
-                self.tilecoords[name+"-"+suffix] = Vector2((x+pos[0])*self.tilesize, (y+pos[1])*self.tilesize)
+                self.tilecoords[name+"-"+suffix] = Vector2((x+pos[0])*8, (y+pos[1])*8)
                 self.tilesolid[name+"-"+suffix] = solid
+                self.tileinfo[name+"-"+suffix] = info
 
     def tc_image(self, at):
         key = str(at.x)+"x"+str(at.y)
         surf = self.tileimages.get(key, None)
         if surf is None:
-            tilesize = (self.tilesize, self.tilesize)
+            tilesize = (8, 8)
             surf = pygame.Surface(tilesize)
             surf.blit(self.tilemap, (0, 0), pygame.Rect(at.list, tilesize))
             self.tileimages[key] = surf
@@ -232,10 +240,10 @@ class Map():
     def draw(self, surface):
         for y, row in enumerate(self.chunks):
             for x, chunk in enumerate(row):
-                p = Vector2(x * self.chunksize.x, y * self.chunksize.y) * self.tilesize
+                p = Vector2(x * self.chunksize.x, y * self.chunksize.y) * 8
                 aabb = AABB(
                     p,
-                    p + self.chunksize * self.tilesize
+                    p + self.chunksize * 8
                 )
                 if self.game.camera.get_view().intersect(aabb):
                     chunk.draw(surface, self.game.camera.to_screen(p).list)

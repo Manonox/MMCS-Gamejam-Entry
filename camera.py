@@ -17,7 +17,7 @@ class Camera():
         self._realpos = pos
 
     def get(self):
-        return self._realpos
+        return round(self._realpos)
 
     def set_zoom(self, zoom):
         self.zoom = zoom
@@ -40,5 +40,5 @@ class Camera():
         )
 
     def update(self, dt):
-        self._realpos += (self.pos - self._realpos) * 0.1
-        self._realzoom += (self.zoom - self._realzoom) * 0.1
+        self._realpos += (self.pos - self._realpos) * 0.05
+        self._realzoom += (self.zoom - self._realzoom) * 0.05

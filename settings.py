@@ -1,3 +1,5 @@
+import pygame
+
 class Parameter():
 
     def __init__(self):
@@ -32,6 +34,11 @@ class BooleanParameter(Parameter):
     def __init__(self):
         super().__init__()
 
+class KeyParameter(Parameter):
+
+    def __init__(self):
+        super().__init__()
+
 class Settings():
     """
         Select,
@@ -41,6 +48,9 @@ class Settings():
 
     def __init__(self):
         self._values = {}
+        self.binds = {}
+        self.keybinds = {}
+        self.changingBind = None
 
     def __getattr__(self, name):
         return self._values.get(name, None)
@@ -61,3 +71,25 @@ class Settings():
     def add_boolean(self, name, default):
         self._values[name] = BooleanParameter()
         self._values[name].default = default
+
+    def add_keybind(self, name, default):
+        self.binds[name] = KeyParameter()
+        self.binds[name].default = default
+        self.keybinds[default] = name
+
+    def event(self, ev):
+        if self.changingBind is None:
+            return
+        if ev.type == pygame.KEYDOWN:
+            if ev.key == pygame.K_ESCAPE:
+                ev.key = None
+            self.set_keybind(self.changingBind, ev.key)
+            self.changingBind = None
+
+    def change_keybind(self, name):
+        self.changingBind = name
+
+    def set_keybind(self, name, key):
+        self.binds[name].value = key
+        if key:
+            self.keybinds[key] = name
