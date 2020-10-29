@@ -9,9 +9,14 @@ from states.default.main import DefaultState
 from classes.vector import Vector2
 from settings import Settings
 from input import Input
+from camera import Camera
 
 import math
 from screeninfo import get_monitors
+
+import pymunk
+import pymunk.pygame_util
+positive_y_is_up = False
 
 class GameWindow():
 
@@ -27,6 +32,7 @@ class GameWindow():
         pygame.init()
 
         self.init_window()
+        self.init_physics()
         self.init_states()
         self.init_input()
 
@@ -49,13 +55,17 @@ class GameWindow():
         if fullscreen:
             flags = flags | FULLSCREEN
 
+        self.camera = Camera(self)
+
         self.window_size = self.real_size * px_scale
         self.screen = pygame.display.set_mode(
             self.window_size.list,
             flags
         )
 
-        self.surface = pygame.Surface(self.real_size.list)
+        self.surface = pygame.Surface(self.real_size.list).convert(self.screen)
+
+        self.debug_font = pygame.font.SysFont("Arial", 14, True)
 
     def init_states(self):
         self.states = {
@@ -71,6 +81,12 @@ class GameWindow():
         self.changing_state = False
         self.changing_from = ""
         self.changing_to = ""
+
+    def init_physics(self):
+        self.space = pymunk.Space()
+        self.space.gravity = 0, 1000
+        self.accumulator = 0
+        self.phys_time = 0
 
     def to_real(self, v):
         return v * self.real_size / self.window_size
@@ -89,6 +105,7 @@ class GameWindow():
     def loop(self):
         self.delta = self.clock.get_time()
         self.delta /= 1000
+        self.delta = min(self.delta, 1/10)
 
         # Event'ы
         for ev in pygame.event.get():
@@ -109,7 +126,13 @@ class GameWindow():
         self.pre_draw(self.surface)
         self.game_state().draw(self.surface)
         self.draw(self.surface)
-        self.screen.blit(pygame.transform.scale(self.surface, self.window_size.list), (0, 0))
+        if self.current_state == "default":
+            wnd_size = self.window_size * self.camera.get_zoom()
+            offset = (self.window_size - wnd_size) / 2
+            self.screen.blit(pygame.transform.scale(self.surface, wnd_size.list), offset.list)
+        else:
+            self.screen.blit(pygame.transform.scale(self.surface, self.window_size.list), (0, 0))
+        self.draw_debug(self.screen)
         pygame.display.flip() # Обновляет экран
         # - - - - - - - -
 
@@ -161,10 +184,20 @@ class GameWindow():
         if ev.type == pygame.QUIT:
             self.running = False
 
-    def pre_update(self, delta):
-        pass
+    def pre_update(self, dt):
+        if self.current_state == "default":
+            fixed_dt = 1/60
+            self.accumulator += dt
+            while self.accumulator >= fixed_dt:
+                self.space.step(fixed_dt)
+                self.phys_time += fixed_dt
+                self.accumulator -= fixed_dt
 
-    def update(self, delta):
+            self.phys_blend = self.accumulator / fixed_dt
+
+            self.camera.update(dt)
+
+    def update(self, dt):
         pass
 
     def pre_draw(self, surface):
@@ -172,3 +205,7 @@ class GameWindow():
 
     def draw(self, surface):
         pass
+
+    def draw_debug(self, surface):
+        text = "FPS: " + str(round(self.clock.get_fps(), 1))
+        surface.blit(self.debug_font.render(text, True, (255, 255, 255)), (0, 0))

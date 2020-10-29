@@ -5,14 +5,15 @@ class Vector2(object):
 
     def __init__(self, *args, **kwargs):
         self.__x, self.__y = 0, 0
-        if isinstance(args[0], (tuple, list)):
-            self.__x, self.__y = args[0]
-        if len(args)==2:
-            self.__x, self.__y = args
-        if isinstance(args[0], Vector2):
-            self.__x, self.__y = args[0].x, args[0].y
-        if len(args)==1 and isinstance(args[0], (float, int)):
-            self.__x, self.__y = args[0], args[0]
+        if len(args)>0:
+            if isinstance(args[0], (tuple, list)):
+                self.__x, self.__y = args[0]
+            if len(args)==2:
+                self.__x, self.__y = args
+            if isinstance(args[0], Vector2):
+                self.__x, self.__y = args[0].x, args[0].y
+            if len(args)==1 and isinstance(args[0], (float, int)):
+                self.__x, self.__y = args[0], args[0]
 
     def setX(self, x):
         self.__x = x
@@ -36,6 +37,13 @@ class Vector2(object):
         if len == 0:
             return Vector2(0, 0)
         return Vector2(self.__x, self.__y) / len
+
+    def normalize(self):
+        len = sqrt(self.__x**2+self.__y**2)
+        if len == 0:
+            return
+        self.__x /= len
+        self.__y /= len
 
     def __round__(self, n=0):
         return Vector2(round(self.__x, n), round(self.__y, n))
