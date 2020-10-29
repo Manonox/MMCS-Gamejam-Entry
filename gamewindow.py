@@ -45,7 +45,7 @@ class GameWindow():
         for i in range(2, max_px):
             pixel_scales.append(i)
         self.settings.add_select("pixel_scale", max_px-1, pixel_scales, False)
-        self.settings.add_boolean("fullscreen", False)
+        self.settings.add_boolean("fullscreen", True)
         self.settings.add_slider("framerate", 144, 30, 288)
 
     def init_window(self):
@@ -127,9 +127,12 @@ class GameWindow():
         self.game_state().draw(self.surface)
         self.draw(self.surface)
         if self.current_state == "default":
-            wnd_size = self.window_size * self.camera.get_zoom()
-            offset = (self.window_size - wnd_size) / 2
-            self.screen.blit(pygame.transform.scale(self.surface, wnd_size.list), offset.list)
+            surf = pygame.Surface((self.real_size / self.camera.get_zoom()).list)
+            surf.blit(self.surface, (0, 0), pygame.Rect(
+                (0, 0),
+                (self.real_size / self.camera.get_zoom()).list
+            ))
+            self.screen.blit(pygame.transform.scale(surf, self.window_size.list), (0, 0))
         else:
             self.screen.blit(pygame.transform.scale(self.surface, self.window_size.list), (0, 0))
         self.draw_debug(self.screen)

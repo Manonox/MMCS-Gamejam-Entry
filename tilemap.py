@@ -141,16 +141,6 @@ class Chunk():
     def draw(self, surface, pos):
         if self.surface:
             surface.blit(self.surface, pos)
-        pos = Vector2(pos)
-        for seg in self.segments:
-            p1 = seg[0] * self.map.tilesize + pos
-            p2 = seg[1] * self.map.tilesize + pos
-            pygame.draw.line(
-                surface,
-                (255, 0, 0),
-                p1.list,
-                p2.list
-            )
 
 class Map():
 
@@ -174,23 +164,13 @@ class Map():
     def tc_init(self):
         self.tc_add_4x4("cave_wall", (0, 0))
 
-    def tc_add_3x3(self, name, pos, solid=True):
-        suffixes = [
-            ["ul", "um", "ur"],
-            ["ml", "mm", "mr"],
-            ["dl", "dm", "dr"]
-        ]
-        for y, row in enumerate(suffixes):
-            for x, suffix in enumerate(row):
-                self.tilecoords[name+"-"+suffix] = Vector2(x+pos[0], y+pos[1])
-                self.tilesolid[name+"-"+suffix] = solid
-
     def tc_add_4x4(self, name, pos, solid=True):
+        # LEFT RIGHT TOP BOTTOM
         suffixes = [
-            ["ul", "um", "ur", "ss"],
-            ["ml", "mm", "mr", "us"],
-            ["dl", "dm", "dr", "ds"],
-            ["sl", "sr", "lr", "ud"]
+            ["1010", "0010", "0110", "1111"],
+            ["1000", "0000", "0100", "1110"],
+            ["1001", "0001", "0101", "1101"],
+            ["1011", "0111", "0011", "1100"]
         ]
         for y, row in enumerate(suffixes):
             for x, suffix in enumerate(row):

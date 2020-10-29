@@ -40,5 +40,5 @@ class Camera():
         )
 
     def update(self, dt):
-        self._realpos += (self.pos - self._realpos) * 0.3
-        self._realzoom += (self.zoom - self._realzoom) * 0.3
+        self._realpos += (self.pos - self._realpos) * 0.1
+        self._realzoom += (self.zoom - self._realzoom) * 0.1

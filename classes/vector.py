@@ -127,4 +127,4 @@ class Vector2(object):
 
     @property
     def list(self):
-        return [round(self.__x), round(self.__y)]
+        return [int(self.__x), int(self.__y)]
