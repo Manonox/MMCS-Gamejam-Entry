@@ -5,6 +5,7 @@ import pymunk
 import math
 import draw
 import random
+from util import get_path, get_all_subclasses
 
 def value(id, name, args, kwargs, default=None):
     if kwargs.get(name):
@@ -142,7 +143,7 @@ class Pawn(PhysEntity):
             multiplier = 1 - (armor_efficiency * armor) / (1 + armor_efficiency * abs(armor))
             damage *= multiplier
 
-        self.body.apply_impulse_at_local_point((dmgdata.get("force", Vector2()) * self.body.mass).list)
+        self.vel = self.vel + dmgdata.get("force", Vector2())
 
         self.health = max(self.health - damage, 0)
         if self.health == 0:
@@ -199,7 +200,7 @@ class Enemy(Pawn):
         move_x = ai.get_axis("x")
         maxspeed = ai.get_axis("maxspeed")
 
-        acceltime = 0.05 if self.grounded else 0.15
+        acceltime = 0.15 if self.grounded else 0.2
 
         accel = maxspeed / acceltime * dt
 
@@ -321,7 +322,29 @@ class Player(Pawn):
         self.last_grounded = True
         self.last_fallspeed = 0
 
-        self.light = Light(50, (50, 45, 40))
+
+        # ATTACKING
+
+        self.attack_damage = 50
+
+        self.attack_speed = 1.5
+        self.attack_timer = 0
+
+        self.attack_vfx_timer = 0
+
+        self.attack_vfx_duration = 100
+        self.attack_vfx_frames = []
+        for i in range(7):
+            img = pygame.image.load(get_path(
+                "resources/sprites/vfx/player_attack/player_attack"+str(i+1)+".png"
+            )).convert_alpha(self.game.surface)
+            self.attack_vfx_frames.append(pygame.transform.scale(img, (32, 16)))
+
+
+        # LIGHT
+
+        brightness = 0.5
+        self.light = Light(50, (255*brightness, 245*brightness, 230*brightness))
         self.entlist.push(self.light, 1000)
 
     def die(self, dmgdata={}):
@@ -334,14 +357,48 @@ class Player(Pawn):
         self.jump_timer = pygame.time.get_ticks()
 
     def attack(self, dir):
-        pass
+        self.attack_vfx_timer = pygame.time.get_ticks() + self.attack_vfx_duration
+        for ent in self.entlist.get_all():
+            if ent.id == self.id:
+                continue
+            if not hasattr(ent, "health"):
+                continue
+
+            entdir = ent.pos - self.pos
+            entdir.normalize()
+            ang = math.degrees(math.atan2(-entdir.y, entdir.x))
+            hitang = math.degrees(math.atan2(-dir.y, dir.x))
+            phi = abs(ang-hitang) % 360
+            phi = (360 - phi) if (phi > 180) else phi
+            maxl = 1 - (phi/30) * 0.5
+
+            if phi < 30 and dir.length < maxl * 50:
+                ent.take_damage({
+                    "damage": self.attack_damage,
+                    "force": dir * 120,
+                    "attacker": self
+                })
+
+    def draw_attack(self, surface, pos):
+        attack_vfx_frame = (self.attack_vfx_timer - pygame.time.get_ticks()) / self.attack_vfx_duration
+        if 0 < attack_vfx_frame < 1:
+            dir = self.game.camera.to_world(self.game.input.mouse_pos()) - self.pos
+            dir.normalize()
+
+            frame = math.floor((1-attack_vfx_frame) * len(self.attack_vfx_frames))
+            ang = math.atan2(-dir.y, dir.x)
+            surf = pygame.transform.rotate(self.attack_vfx_frames[frame], math.degrees(ang)+180)
+
+            surface.blit(surf, (pos - Vector2(surf.get_size()) * 0.5 + dir * 16).list)
 
     def landed(self, speed):
         speed = max(speed - 375, 0)
-        self.take_damage({
-            "damage": math.floor(speed / 225 * 125),
-            "ignore_armor": True
-        })
+        dmg = math.floor(speed / 225 * 125)
+        if dmg > 0:
+            self.take_damage({
+                "damage": dmg,
+                "ignore_armor": True
+            })
 
     def event(self, ev):
         if ev.type == pygame.KEYDOWN:
@@ -350,11 +407,14 @@ class Player(Pawn):
                 self.jumpstop = True
 
     def update(self, dt):
+        super().update(dt)
+
         input = self.game.input
+        ticks = pygame.time.get_ticks()
 
         # self.game.camera.zoom = 2 if input.key_pressed("move_up") else 1
 
-        if self.grounded and self.jumpqueue_timer+100 > pygame.time.get_ticks():
+        if self.grounded and self.jumpqueue_timer+100 > ticks:
             self.jump()
             self.grounded_timer = 0
             self.jumpqueue_timer = 0
@@ -369,7 +429,6 @@ class Player(Pawn):
             self.jumpstop = False
             self.vel = Vector2(self.vel.x, self.vel.y * 0.5)
 
-        super().update(dt)
 
         move_left = 1 if input.key_pressed("move_left") else 0
         move_right = 1 if input.key_pressed("move_right") else 0
@@ -404,12 +463,24 @@ class Player(Pawn):
 
         self.light.pos = self.pos.copy()
 
+
+        # ATTACKING
+
+        if input.mouse_pressed(0) and self.attack_timer < ticks:
+            self.attack_timer = ticks + 1000/self.attack_speed
+            dir = self.game.camera.to_world(input.mouse_pos()) - self.pos
+            dir.normalize()
+            self.attack(dir)
+
     def draw_sprite(self, surface, pos):
         hp_mul = self.health / self.maxhealth
         pygame.draw.rect(surface, (255*(1-hp_mul), 255*hp_mul, 0), pygame.Rect(
             ((pos - self.rendersize / 2) - Vector2(0, 0.5)).list,
             (self.rendersize).list
         ))
+
+        self.draw_attack(surface, pos)
+
 
 class Light(Entity):
 
@@ -573,6 +644,9 @@ class EntList():
 
     def get_by_class(self, classname):
         return self._classes.get(classname, {}).values()
+
+    def get_all(self):
+        return self._entities.values()
 
     def remove_all(self):
         del self._entities

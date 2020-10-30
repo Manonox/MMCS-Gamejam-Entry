@@ -162,7 +162,7 @@ class DefaultState(FadeInOutState):
 
         surface.blit(surf, (0, 0), special_flags=BLEND_RGB_MULT)
 
-        surface.blit(self.lighting, (0, 0), special_flags=BLEND_RGB_ADD)
+        #surface.blit(self.lighting, (0, 0), special_flags=BLEND_RGB_ADD)
 
     def limit_camera(self, campos):
         sz = self.game.real_size / 2 / self.game.camera.get_zoom()
@@ -197,9 +197,9 @@ class DefaultState(FadeInOutState):
         self.surface = surface
         surface.fill((0, 0, 0))
         self.parallax.draw(surface)
-        self.entities.draw(surface)
         if self.map:
             self.map.draw(surface)
+        self.entities.draw(surface)
         self.apply_lighting(surface)
 
         super().draw(surface)

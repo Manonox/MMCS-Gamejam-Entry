@@ -27,8 +27,8 @@ class Input():
     def mouse_pos(self):
         return self.game.to_real(Vector2(pygame.mouse.get_pos()))
 
-    def mouse_pressed(self):
-        return pygame.mouse.get_pressed()
+    def mouse_pressed(self, b):
+        return pygame.mouse.get_pressed()[b]
 
     def mouse_rel(self):
         return self.game.to_real(Vector2(pygame.mouse.get_rel()))

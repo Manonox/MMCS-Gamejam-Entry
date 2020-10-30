@@ -27,6 +27,7 @@ class Panel():
         self.rect = None
         self.color = pygame.Color(100, 100, 100)
         self.hidden = False
+        self.pressed = False
 
     def mouse_hover(self):
         if self.rect is None or self.hidden:
