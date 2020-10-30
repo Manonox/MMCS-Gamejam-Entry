@@ -8,7 +8,7 @@ class PauseState(State):
 
     def pre_activate(self, previous=None):
         self.bg = self.game.surface.copy()
-        self.bg.set_alpha(30)
+        self.bg.set_alpha(128)
 
     def event(self, ev):
         if ev.type == pygame.KEYUP:

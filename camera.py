@@ -30,7 +30,7 @@ class Camera():
         return pos - self.get() + self.game.real_size / (2 * self._realzoom)
 
     def to_world(self, pos):
-        return self.get() - pos - self.game.real_size / (2 * self._realzoom)
+        return pos + self.get() - self.game.real_size / (2 * self._realzoom)
 
     def get_view(self):
         to_corner = self.game.real_size / (2 * self._realzoom)
@@ -40,5 +40,5 @@ class Camera():
         )
 
     def update(self, dt):
-        self._realpos += (self.pos - self._realpos) * 0.05
+        self._realpos += (self.pos - self._realpos) * 0.08
         self._realzoom += (self.zoom - self._realzoom) * 0.05

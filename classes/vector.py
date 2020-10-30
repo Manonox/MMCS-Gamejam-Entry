@@ -24,6 +24,9 @@ class Vector2(object):
     x = property(lambda self: self.__x, setX)
     y = property(lambda self: self.__y, setY)
 
+    def __eq__(self, other):
+        return self.__x == other.x and self.__y == other.y
+
     @property
     def length(self):
         return sqrt(self.__x**2+self.__y**2)
