@@ -40,6 +40,7 @@ class GameWindow():
         self.init_input()
 
         self.clock = pygame.time.Clock()
+        self.time = 0
         self.delta = 0
 
     def init_settings(self):
@@ -57,6 +58,7 @@ class GameWindow():
         self.settings.add_keybind("move_right", K_d)
 
         self.settings.add_keybind("move_jump", K_SPACE)
+        self.settings.add_keybind("pickup", K_e)
 
     def init_window(self):
         fullscreen = self.settings.fullscreen.get()
@@ -203,8 +205,11 @@ class GameWindow():
             self.running = False
 
     def pre_update(self, dt):
+
         self.phys_blend = 0
         if self.current_state == "default":
+            self.time += dt
+
             fixed_dt = 1/128
             self.accumulator += dt
             while self.accumulator >= fixed_dt:

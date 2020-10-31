@@ -84,8 +84,9 @@ class PhysEntity(Entity):
         )
         self.game.space.add(self.body, self.shape)
 
-    def __del__(self):
-        pass
+    def remove(self):
+        self.game.space.remove(self.body, self.shape)
+        super().remove()
 
     def arbiter(self, a):
         n = -a.contact_point_set.normal
@@ -181,8 +182,16 @@ class Enemy(Pawn):
 
         self.jumpheight = 14
 
+    def death_vfx(self):
+        pass
+
+    def give_loot(self):
+        pass
+
     def die(self, dmgdata={}):
         super().die(dmgdata)
+        self.drop_loot()
+        self.death_vfx()
         self.remove()
 
     def update(self, dt):
@@ -223,265 +232,6 @@ class Enemy(Pawn):
         self.vel = Vector2(new_vx, new_vy)
 
 
-class AI():
-
-    def __init__(self, game, ent):
-        self.game = game
-        self.ent = ent
-
-    def get_action(self, name):
-        return False
-
-    def get_axis(self, name):
-        return 0
-
-    def event(self, ev):
-        pass
-
-    def update(self, dt):
-        pass
-
-class RandomAI(AI):
-
-    def __init__(self, game, ent):
-        super().__init__(game, ent)
-        self.next_think = 0
-        self.move = random.randint(0, 1)*2-1
-        self.jumping = False
-
-    def get_action(self, name):
-        map = self.game.game_state().map
-        if name == "jump":
-            return self.jumping and self.ent.grounded
-
-    def get_axis(self, name):
-        map = self.game.game_state().map
-        if name == "maxspeed":
-            return 20
-
-        if name == "x":
-            if self.ent.grounded:
-                ground = map.block_at(
-                    self.ent.pos + self.ent.size * Vector2(self.move, 1.1)
-                )
-                wall = map.block_at(
-                    self.ent.pos + self.ent.size * Vector2(self.move*1.1, 0)
-                )
-                if not map.tilesolid.get(ground, False) or map.tilesolid.get(wall, False):
-                    self.move = -self.move
-            return self.move
-
-    def update(self, dt):
-        ticks = pygame.time.get_ticks()
-        if self.next_think < ticks:
-            self.next_think = ticks + 500 + 500 * random.random()
-            move = random.randint(0, 1)
-            self.move = (move*2-1) if random.random()>0.2 else 0
-            self.jumping = random.random()>0.8
-
-
-class Slime(Enemy):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.size = Vector2(5, 4)
-        self.rendersize = Vector2(8, 8)
-
-    def spawned(self):
-        super().spawned()
-        self.ai = RandomAI(self.game, self)
-        self.jumpheight = 2.5 * 8
-
-    def draw_sprite(self, surface, pos):
-        pygame.draw.rect(surface, (255, 128, 0), pygame.Rect(
-            ((pos - self.rendersize / 2) - Vector2(0, 0.5)).list,
-            (self.rendersize).list
-        ))
-
-
-class Player(Pawn):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.spawn_pos = value(0, "pos", args, kwargs, Vector2())
-        self.size = Vector2(11, 12)
-        self.rendersize = Vector2(16)
-
-    def spawned(self):
-        super().spawned()
-
-        self.gravity = 60 * 8
-
-        self.jumpheight = 4 * 8
-        self.grounded_timer = 0
-
-        self.jump_timer = 0
-        self.jumpqueue_timer = 0
-        self.jumpstop = False
-
-        self.last_grounded = True
-        self.last_fallspeed = 0
-
-
-        # ATTACKING
-
-        self.attack_damage = 50
-
-        self.attack_speed = 1.5
-        self.attack_timer = 0
-
-        self.attack_vfx_timer = 0
-
-        self.attack_vfx_duration = 100
-        self.attack_vfx_frames = []
-        for i in range(7):
-            img = pygame.image.load(get_path(
-                "resources/sprites/vfx/player_attack/player_attack"+str(i+1)+".png"
-            )).convert_alpha(self.game.surface)
-            self.attack_vfx_frames.append(pygame.transform.scale(img, (32, 16)))
-
-
-        # LIGHT
-
-        brightness = 0.5
-        self.light = Light(50, (255*brightness, 245*brightness, 230*brightness))
-        self.entlist.push(self.light, 1000)
-
-    def die(self, dmgdata={}):
-        super().die(dmgdata)
-        self.remove()
-        self.light.remove()
-
-    def jump(self):
-        super().jump()
-        self.jump_timer = pygame.time.get_ticks()
-
-    def attack(self, dir):
-        self.attack_vfx_timer = pygame.time.get_ticks() + self.attack_vfx_duration
-        for ent in self.entlist.get_all():
-            if ent.id == self.id:
-                continue
-            if not hasattr(ent, "health"):
-                continue
-
-            entdir = ent.pos - self.pos
-            entdir.normalize()
-            ang = math.degrees(math.atan2(-entdir.y, entdir.x))
-            hitang = math.degrees(math.atan2(-dir.y, dir.x))
-            phi = abs(ang-hitang) % 360
-            phi = (360 - phi) if (phi > 180) else phi
-            maxl = 1 - (phi/30) * 0.5
-
-            if phi < 30 and dir.length < maxl * 50:
-                ent.take_damage({
-                    "damage": self.attack_damage,
-                    "force": dir * 120,
-                    "attacker": self
-                })
-
-    def draw_attack(self, surface, pos):
-        attack_vfx_frame = (self.attack_vfx_timer - pygame.time.get_ticks()) / self.attack_vfx_duration
-        if 0 < attack_vfx_frame < 1:
-            dir = self.game.camera.to_world(self.game.input.mouse_pos()) - self.pos
-            dir.normalize()
-
-            frame = math.floor((1-attack_vfx_frame) * len(self.attack_vfx_frames))
-            ang = math.atan2(-dir.y, dir.x)
-            surf = pygame.transform.rotate(self.attack_vfx_frames[frame], math.degrees(ang)+180)
-
-            surface.blit(surf, (pos - Vector2(surf.get_size()) * 0.5 + dir * 16).list)
-
-    def landed(self, speed):
-        speed = max(speed - 375, 0)
-        dmg = math.floor(speed / 225 * 125)
-        if dmg > 0:
-            self.take_damage({
-                "damage": dmg,
-                "ignore_armor": True
-            })
-
-    def event(self, ev):
-        if ev.type == pygame.KEYDOWN:
-            if ev.key == "move_jump":
-                self.jumpqueue_timer = pygame.time.get_ticks()
-                self.jumpstop = True
-
-    def update(self, dt):
-        super().update(dt)
-
-        input = self.game.input
-        ticks = pygame.time.get_ticks()
-
-        # self.game.camera.zoom = 2 if input.key_pressed("move_up") else 1
-
-        if self.grounded and self.jumpqueue_timer+100 > ticks:
-            self.jump()
-            self.grounded_timer = 0
-            self.jumpqueue_timer = 0
-
-        if (
-        not self.grounded and
-        not input.key_pressed("move_jump") and
-        self.jump_timer+500 > pygame.time.get_ticks() and
-        self.vel.y<0 and
-        self.jumpstop
-            ):
-            self.jumpstop = False
-            self.vel = Vector2(self.vel.x, self.vel.y * 0.5)
-
-
-        move_left = 1 if input.key_pressed("move_left") else 0
-        move_right = 1 if input.key_pressed("move_right") else 0
-        topspeed = 70
-
-        acceltime = 0.05 if self.grounded else 0.15
-
-        accel = topspeed / acceltime * dt
-
-        self.body.friction = topspeed / self.gravity
-
-        target_vx = (move_right-move_left)*topspeed
-        for normal in self.normals:
-            if normal.x>0 and target_vx<0:
-                target_vx *= 1-normal.x
-            if normal.x<0 and target_vx>0:
-                target_vx *= 1+normal.x
-
-        vx = self.vel.x
-        new_vx = vx + min(max(target_vx - vx, -accel), accel)
-
-        vy = self.vel.y
-        new_vy = min(vy, 600)
-
-        self.vel = Vector2(new_vx, new_vy)
-
-        if self.grounded and not self.last_grounded:
-            self.landed(self.last_fallspeed)
-
-        self.last_grounded = self.grounded
-        self.last_fallspeed = new_vy
-
-        self.light.pos = self.pos.copy()
-
-
-        # ATTACKING
-
-        if input.mouse_pressed(0) and self.attack_timer < ticks:
-            self.attack_timer = ticks + 1000/self.attack_speed
-            dir = self.game.camera.to_world(input.mouse_pos()) - self.pos
-            dir.normalize()
-            self.attack(dir)
-
-    def draw_sprite(self, surface, pos):
-        hp_mul = self.health / self.maxhealth
-        pygame.draw.rect(surface, (255*(1-hp_mul), 255*hp_mul, 0), pygame.Rect(
-            ((pos - self.rendersize / 2) - Vector2(0, 0.5)).list,
-            (self.rendersize).list
-        ))
-
-        self.draw_attack(surface, pos)
-
-
 class Light(Entity):
 
     def __init__(self, radius, color=(255, 255, 255), colorbg=(0, 0, 0), darkness=False):
@@ -493,8 +243,16 @@ class Light(Entity):
         self.color = color
         self.colorbg = colorbg
         self.darkness = darkness
+        self.on = True
         self.project = True
         self.surface = None
+
+    @staticmethod
+    def from_surface(surf):
+        radius = max(surf.get_size()[0], surf.get_size()[1]) / 2
+        light = Light(radius)
+        light.texture = surf
+        return light
 
     def get_aabb(self):
         offset = Vector2(self.radius)
@@ -568,8 +326,14 @@ class Light(Entity):
 
 
     def draw_tex(self, surface):
+        if not self.on:
+            return
+
         if self.renderpos.distance(self.pos)>1:
-            self.project_light()
+            if self.project:
+                self.project_light()
+            else:
+                self.surface = self.texture.copy()
             self.renderpos = self.pos.copy()
         if self.surface:
             pos = self.game.camera.to_screen(self.pos)
@@ -609,10 +373,17 @@ class Light(Entity):
 
 class EntList():
 
-    def __init__(self, game):
+    def __init__(self, game, game_state):
         self.game = game
+        self.game_state = game_state
         self._entities = {}
         self._classes = {}
+
+        self._add = []
+        self._iterating = False
+
+        self.chunk_tree = {} # "0x0 , 0x13"
+        self.chunk_tree_size = Vector2(128)
 
     def get(self, id):
         return self._entities.get(str(id), None)
@@ -623,7 +394,7 @@ class EntList():
             id += 1
         return id
 
-    def push(self, ent, id=None):
+    def add(self, ent, id=None):
         if id is None:
             id = self.get_valid_id()
         self._entities[str(id)] = ent
@@ -632,6 +403,19 @@ class EntList():
         if self._classes.get(classname, None) is None:
             self._classes[classname] = {}
         self._classes[classname][str(id)] = ent
+        return ent
+
+    def add_cleanup(self):
+        for pair in self._add:
+            self.add(pair[0], pair[1])
+        self._add = []
+
+    def push(self, ent, id=None):
+        if not self._iterating:
+            self.add(ent, id)
+        else:
+            self._add.append([ent, id])
+        return ent
 
     def remove(self, id):
         ent = self.get(str(id))
@@ -653,16 +437,56 @@ class EntList():
         self._entities = {}
 
     def event(self, ev):
+        self._iterating = True
         [ent.event(ev) for ent in self._entities.values()]
+        self._iterating = False
+
+    def chunk_tree_add(self, ent):
+        if not hasattr(ent, "pos") and self.pos:
+            return
+
+        if not hasattr(ent, "size") or ent.size is None:
+            chunk_pos = math.floor(ent.pos / self.chunk_tree_size)
+            id = str(chunk_pos.x)+"x"+str(chunk_pos.y)
+            lst = self.chunk_tree.get(id, [])
+            lst.append(ent)
+            self.chunk_tree[id] = lst
+        else:
+            chunk_pos_min = math.floor((ent.pos - ent.size / 2) / self.chunk_tree_size)
+            chunk_pos_max = math.floor((ent.pos + ent.size / 2) / self.chunk_tree_size)
+            for y in range(chunk_pos_min.y, chunk_pos_max.y+1):
+                for x in range(chunk_pos_min.x, chunk_pos_max.x+1):
+                    id = str(x)+"x"+str(y)
+                    lst = self.chunk_tree.get(id, [])
+                    lst.append(ent)
+                    self.chunk_tree[id] = lst
+
+    def chunk_tree_get(self, aabb):
+        ents = set()
+        chunk_min = math.floor((aabb.min) / self.chunk_tree_size)
+        chunk_max = math.floor((aabb.max) / self.chunk_tree_size)
+        for y in range(chunk_min.y, chunk_max.y+1):
+            for x in range(chunk_min.x, chunk_max.x+1):
+                id = str(x)+"x"+str(y)
+                ents = ents.union(set(self.chunk_tree.get(id, [])))
+        return ents
 
     def update(self, dt):
+        self._iterating = True
         remove_ids = []
+        self.chunk_tree = {}
         for ent in self._entities.values():
+            self.chunk_tree_add(ent)
             ent.update(dt)
             if ent._must_remove:
                 remove_ids.append(ent.id)
+
         for id in remove_ids:
             self.remove(id)
+        self._iterating = False
+        self.add_cleanup()
 
     def draw(self, surface):
+        self._iterating = True
         [ent.draw(surface) for ent in self._entities.values()]
+        self._iterating = False

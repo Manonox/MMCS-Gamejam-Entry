@@ -37,15 +37,10 @@ class Chunk():
         sy = self.pos.y * self.size.y
         for x in range(0, self.size.x):
             for y in range(0, self.size.y):
-                tile = self.map.get_tile(Vector2(x+sx, y+sy))
-                if tile is None:
-                    continue
-                coords = self.map.tilecoords.get(tile, None)
-                if coords is None:
-                    continue
-                image = self.map.tc_image(coords)
-                blit_pos = Vector2(x, y) * 8
-                self.surface.blit(image, blit_pos.list)
+                image = self.map.tc_image(Vector2(x+sx, y+sy))
+                if image:
+                    blit_pos = Vector2(x, y) * 8
+                    self.surface.blit(image, blit_pos.list)
         self.surface = self.surface.convert(self.game.surface)
 
     def bake_physics(self):
@@ -200,7 +195,7 @@ class Map():
         self.data = None
         self.size = None
 
-        self.chunksize = Vector2(32, 32)
+        self.chunksize = Vector2(24)
         self.chunk_amount = Vector2()
         self.chunks = []
 
@@ -233,6 +228,8 @@ class Map():
         if info is None:
             info = {}
 
+        info["4x4"] = True
+
         # LEFT RIGHT TOP BOTTOM
         suffixes = [
             ["1010", "0010", "0110", "1111"],
@@ -240,19 +237,44 @@ class Map():
             ["1001", "0001", "0101", "1101"],
             ["1011", "0111", "0011", "1100"]
         ]
-        for y, row in enumerate(suffixes):
-            for x, suffix in enumerate(row):
-                self.tilecoords[name+"-"+suffix] = Vector2((x+pos[0])*8, (y+pos[1])*8)
-                self.tilesolid[name+"-"+suffix] = solid
-                self.tileinfo[name+"-"+suffix] = info
+        suffixes = [
+            ["0000", "0001", "0010", "0011"],
+            ["0100", "0101", "0110", "0111"],
+            ["1000", "1001", "1010", "1011"],
+            ["1100", "1101", "1110", "1111"]
+        ]
+        self.tilecoords[name] = Vector2(pos[0]*8, pos[1]*8)
+        self.tilesolid[name] = solid
+        self.tileinfo[name] = info
+
 
     def tc_image(self, at):
-        key = str(at.x)+"x"+str(at.y)
+        tile = self.get_tile(at)
+        if tile is None:
+            return None
+
+        coords = self.tilecoords.get(tile, None)
+        if coords is None:
+            return None
+
+        info = self.tileinfo.get(tile, None)
+
+        if info:
+            if info.get("4x4", False):
+                bits = 0
+                bits += (0 if (not self.get_tile(at + Vector2(-1, 0))) else 8)
+                bits += (0 if (not self.get_tile(at + Vector2(1, 0))) else 4)
+                bits += (0 if (not self.get_tile(at + Vector2(0, -1))) else 2)
+                bits += (0 if (not self.get_tile(at + Vector2(0, 1))) else 1)
+
+                coords += Vector2(bits % 4, math.floor(bits / 4)) * 8
+
+        key = str(coords.x)+"x"+str(coords.y)
         surf = self.tileimages.get(key, None)
         if surf is None:
             tilesize = (8, 8)
             surf = pygame.Surface(tilesize)
-            surf.blit(self.tilemap, (0, 0), pygame.Rect(at.list, tilesize))
+            surf.blit(self.tilemap, (0, 0), pygame.Rect(coords.list, tilesize))
             self.tileimages[key] = surf
         return surf
 
@@ -305,6 +327,26 @@ class Map():
         if self.valid_tile(at):
             return self.data[at.y][at.x]
         return None
+
+    def remove_tile(self, at):
+        tile = self.get_tile(at)
+        if not tile:
+            return set()
+
+        if not self.tileinfo.get(tile, {}).get("destructable", True):
+            return set()
+
+        self.data[at.y][at.x] = None
+        chunks_near_pos = [
+            math.floor((at+Vector2(-1, 0)) / self.chunksize),
+            math.floor((at+Vector2(1, 0)) / self.chunksize),
+            math.floor((at+Vector2(0, -1)) / self.chunksize),
+            math.floor((at+Vector2(0, 1)) / self.chunksize)
+        ]
+        chunks_near = set()
+        for pos in chunks_near_pos:
+            chunks_near.add(self.chunks[pos.y][pos.x])
+        return chunks_near
 
     def event(self, ev):
         pass

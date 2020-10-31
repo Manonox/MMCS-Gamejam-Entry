@@ -2,14 +2,21 @@ import pygame
 from pygame.locals import *
 
 from state import FadeInOutState
+import math
 from math import floor, ceil, sqrt
 import random
 
 from classes.vector import Vector2
+from classes.aabb import AABB
 
 from tilemap import Map
 from parallax import Parallax
-from entlist import EntList, Light, Player, Slime
+from entlist import EntList, Light
+
+from player import Player
+
+import enemies
+import items
 
 class DefaultState(FadeInOutState):
 
@@ -23,7 +30,7 @@ class DefaultState(FadeInOutState):
         self.parallax = None
 
     def init_world(self):
-        self.entities = EntList(self.game)
+        self.entities = EntList(self.game, self)
 
         self.map_generate()
         self.spawn_player()
@@ -50,25 +57,24 @@ class DefaultState(FadeInOutState):
             self.init_world()
 
     def spawn_player(self):
-        self.player = Player(Vector2(32.5, 32))
+        self.player = self.entities.push(Player(Vector2(32.5, 32)))
         self.game.camera.set(Vector2(32.5, 32) * 8)
 
-        self.entities.push(self.player)
+        self.slime = self.entities.push(enemies.IceSlime(Vector2(35, 35)))
 
-        self.slime = Slime(Vector2(35, 35))
-        self.entities.push(self.slime)
-
-    def map_generate(self, size=(128, 256), fill=0.4, seed=None):
+    def map_generate(self, size=(128, 256), fill=0.5, seed=None):
         self.map = Map(self.game)
 
         random.seed(seed)
 
         wall_thickness = [8, 8]
 
+        gensize = (math.floor(size[0]/2)), size[1]
+
         matr = []
-        for y in range(0, size[1]):
+        for y in range(0, gensize[1]):
             row = []
-            for x in range(0, size[0]):
+            for x in range(0, gensize[0]):
                 value = random.random()<fill
                 if (x < wall_thickness[0]) or (x >= size[0]-wall_thickness[0]):
                     value = True
@@ -83,17 +89,18 @@ class DefaultState(FadeInOutState):
                 for cx in range(x-1, x+2):
                     if cx==x and cy==y:
                         continue
-                    if 0<=cx<size[0] and 0<=cy<size[1]:
-                        count += 1 if matr[cy][cx] else 0
+                    if 0<=cx<gensize[0] and 0<=cy<gensize[1]:
+                        if matr[cy][cx]:
+                            count += 1
                     else:
                         count += 1
             return count
 
-        for i in range(5):
+        for i in range(7):
             new_matr = []
-            for y in range(0, size[1]):
+            for y in range(0, gensize[1]):
                 row = []
-                for x in range(0, size[0]):
+                for x in range(0, gensize[0]):
                     value = matr[y][x]
                     wall_count = count_surrounding(matr, x, y)
                     if wall_count > 4:
@@ -111,27 +118,17 @@ class DefaultState(FadeInOutState):
                 return True
             return False
 
-        def get_wall_bits(matr, x, y):
-            bits = ""
-            bits += ("0" if (not is_valid(matr, x-1, y) or matr[y][x-1]) else "1")
-            bits += ("0" if (not is_valid(matr, x+1, y) or matr[y][x+1]) else "1")
-            bits += ("0" if (not is_valid(matr, x, y-1) or matr[y-1][x]) else "1")
-            bits += ("0" if (not is_valid(matr, x, y+1) or matr[y+1][x]) else "1")
-            return bits
-
         gigawall_thickness = [4, 4]
         tiles = []
         for y in range(0, size[1]):
             row = []
             for x in range(0, size[0]):
-                if matr[y][x]:
-                    if x<gigawall_thickness[0] or x>(size[0]-gigawall_thickness[0]):
-                        row.append("metal")
-                    elif y<gigawall_thickness[1] or y>(size[1]-gigawall_thickness[1]):
-                        row.append("metal")
-                    else:
-                        bits = get_wall_bits(matr, x, y)
-                        row.append("cave_wall-"+bits)
+                if x<gigawall_thickness[0] or x>(size[0]-gigawall_thickness[0]):
+                    row.append("metal")
+                elif y<gigawall_thickness[1] or y>(size[1]-gigawall_thickness[1]):
+                    row.append("metal")
+                elif matr[y][math.floor(x / 2)]:
+                    row.append("cave_wall")
                 else:
                     row.append(None)
             tiles.append(row)
@@ -156,8 +153,9 @@ class DefaultState(FadeInOutState):
         self.lighting.fill((0, 0, 0))
         for light in self.entities.get_by_class("Light"):
             light.draw_tex(self.lighting)
+
         surf = pygame.Surface(self.game.real_size.list)
-        surf.fill((30, 30, 30))
+        surf.fill((10, 10, 10))
         surf.blit(self.lighting, (0, 0), special_flags=BLEND_RGB_ADD)
 
         surface.blit(surf, (0, 0), special_flags=BLEND_RGB_MULT)
@@ -167,7 +165,7 @@ class DefaultState(FadeInOutState):
     def limit_camera(self, campos):
         sz = self.game.real_size / 2 / self.game.camera.get_zoom()
         cmin = Vector2(4) * 8 + sz
-        cmax = (self.map.size - Vector2(4)) * 8 - sz
+        cmax = (self.map.size - Vector2(3)) * 8 - sz
         new_campos = Vector2(
             min(max(campos.x, cmin.x), cmax.x),
             min(max(campos.y, cmin.y), cmax.y)
@@ -188,6 +186,7 @@ class DefaultState(FadeInOutState):
         aim = self.game.input.mouse_pos() - self.game.real_size / 2
         if self.player and self.player.alive:
             self.game.camera.pos = self.limit_camera(self.player.pos + aim * 0.25)
+
         self.entities.update(dt)
         self.map.update(dt)
 

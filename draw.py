@@ -1,9 +1,10 @@
 import pygame
 
 def default_falloff(x):
-    return min(max(1 - x**4, 0), 1)
+    return 1 - x**1.5
 
-def light(radius, colorf, colorb, steps=50, falloff=default_falloff):
+def light(radius, colorf, colorb=(0, 0, 0), steps=50, falloff=default_falloff):
+    radius = round(radius)
     surf = pygame.Surface((radius*2, radius*2))
     surf.fill(colorb)
     for i in range(steps):
